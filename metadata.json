@@ -1,0 +1,6 @@
+{
+  "name": "CodeTugaBuilds - Montador de PCs Inteligente",
+  "description": "Uma aplicação web para facilitar a montagem de computadores personalizados com recomendações inteligentes baseadas em IA, considerando necessidades, orçamento e condições ambientais.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}

@@ -1,0 +1,66 @@
+
+import React from 'react';
+import { Link } from 'react-router-dom';
+import Button from '../components/core/Button';
+
+const HomePage: React.FC = () => {
+  return (
+    <div className="flex flex-col items-center justify-center text-center py-12">
+      <header className="mb-12">
+        <h1 className="text-5xl md:text-6xl font-bold text-accent mb-4">
+          CodeTugaBuilds
+        </h1>
+        <p className="text-xl md:text-2xl text-neutral-dark max-w-2xl mx-auto">
+          Seu assistente inteligente para montar o PC dos seus sonhos, otimizado para suas necessidades e orçamento.
+        </p>
+      </header>
+
+      <div className="grid md:grid-cols-2 gap-8 max-w-4xl w-full mb-16">
+        <div className="bg-secondary p-8 rounded-xl shadow-2xl transform hover:scale-105 transition-transform duration-300">
+          <h2 className="text-3xl font-semibold text-accent mb-4">Montagem Automática com IA</h2>
+          <p className="text-neutral-dark mb-6">
+            Não sabe por onde começar? Deixe nossa Inteligência Artificial guiar você. Responda algumas perguntas e receba uma build personalizada em minutos.
+          </p>
+          <Link to="/build?mode=auto">
+            <Button variant="primary" size="lg" className="w-full">
+              Iniciar Recomendação IA
+            </Button>
+          </Link>
+        </div>
+        <div className="bg-secondary p-8 rounded-xl shadow-2xl transform hover:scale-105 transition-transform duration-300">
+          <h2 className="text-3xl font-semibold text-accent mb-4">Montagem Manual</h2>
+          <p className="text-neutral-dark mb-6">
+            Já tem experiência ou quer total controle? Escolha cada componente manualmente com nosso sistema de verificação de compatibilidade.
+          </p>
+          <Link to="/build?mode=manual">
+            <Button variant="secondary" size="lg" className="w-full">
+              Montar Manualmente
+            </Button>
+          </Link>
+        </div>
+      </div>
+
+      <section className="max-w-3xl w-full text-left">
+        <h3 className="text-2xl font-semibold text-accent mb-6 text-center">Por que CodeTugaBuilds?</h3>
+        <ul className="space-y-4">
+          {[
+            { title: "Recomendações Inteligentes", text: "Nossa IA analisa suas necessidades para sugerir os melhores componentes, considerando até mesmo as condições ambientais do seu espaço.", icon: "🧠" },
+            { title: "Economia de Tempo e Dinheiro", text: "Otimizamos sua build para o seu orçamento, ajudando você a fazer escolhas inteligentes e encontrar bons negócios (links de compra em breve!).", icon: "💰" },
+            { title: "Fácil de Usar", text: "Interface intuitiva e um chatbot amigável tornam o processo de montagem simples, mesmo para iniciantes.", icon: "✨" },
+            { title: "Compatibilidade Garantida", text: "Verificamos a compatibilidade entre as peças para evitar dores de cabeça na hora da montagem.", icon: "🔧" },
+          ].map(feature => (
+            <li key={feature.title} className="bg-primary/50 p-4 rounded-lg flex items-start space-x-3 shadow-md">
+              <span className="text-2xl">{feature.icon}</span>
+              <div>
+                <h4 className="font-semibold text-neutral">{feature.title}</h4>
+                <p className="text-sm text-neutral-dark">{feature.text}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </section>
+    </div>
+  );
+};
+
+export default HomePage;
