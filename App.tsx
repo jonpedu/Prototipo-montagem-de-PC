@@ -36,11 +36,13 @@ const App: React.FC = () => {
             <Route path="/login" element={<AuthPage mode="login" />} />
             <Route path="/register" element={<AuthPage mode="register" />} />
             
+            {/* Build routes are now public */}
+            <Route path="/build" element={<BuildPage />} />
+            <Route path="/build/:buildId" element={<BuildPage />} />
+
             <Route element={<ProtectedRoute />}>
               <Route path="/dashboard" element={<DashboardPage />} />
-              <Route path="/build" element={<BuildPage />} />
-              <Route path="/build/:buildId" element={<BuildPage />} />
-              <Route path="/profile" element={<ProfilePage />} /> {/* Add Profile Route Here */}
+              <Route path="/profile" element={<ProfilePage />} />
             </Route>
             
             <Route path="*" element={

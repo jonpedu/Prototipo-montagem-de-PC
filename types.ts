@@ -17,7 +17,7 @@ export enum ComponentCategory {
 }
 
 export interface PCComponent {
-  id: string;
+  id:string;
   category: ComponentCategory;
   name: string;
   brand: string;
@@ -66,10 +66,9 @@ export interface AIRecommendation {
   compatibilityWarnings?: string[];
 }
 
-export type BuildMode = 'auto' | 'manual' | null;
+export type BuildMode = 'auto' | null; // Removed 'manual'
 
 // For compatibility checking
 export interface CompatibilityRules {
   [key: string]: (component: PCComponent, buildSoFar: SelectedComponent[]) => string | null;
 }
-    

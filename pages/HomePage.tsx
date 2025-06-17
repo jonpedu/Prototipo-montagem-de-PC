@@ -15,26 +15,15 @@ const HomePage: React.FC = () => {
         </p>
       </header>
 
-      <div className="grid md:grid-cols-2 gap-8 max-w-4xl w-full mb-16">
-        <div className="bg-secondary p-8 rounded-xl shadow-2xl transform hover:scale-105 transition-transform duration-300">
+      <div className="flex justify-center w-full mb-16">
+        <div className="bg-secondary p-8 rounded-xl shadow-2xl transform hover:scale-105 transition-transform duration-300 max-w-lg">
           <h2 className="text-3xl font-semibold text-accent mb-4">Montagem Automática com IA</h2>
           <p className="text-neutral-dark mb-6">
             Não sabe por onde começar? Deixe nossa Inteligência Artificial guiar você. Responda algumas perguntas e receba uma build personalizada em minutos.
           </p>
-          <Link to="/build?mode=auto">
+          <Link to="/build">
             <Button variant="primary" size="lg" className="w-full">
               Iniciar Recomendação IA
-            </Button>
-          </Link>
-        </div>
-        <div className="bg-secondary p-8 rounded-xl shadow-2xl transform hover:scale-105 transition-transform duration-300">
-          <h2 className="text-3xl font-semibold text-accent mb-4">Montagem Manual</h2>
-          <p className="text-neutral-dark mb-6">
-            Já tem experiência ou quer total controle? Escolha cada componente manualmente com nosso sistema de verificação de compatibilidade.
-          </p>
-          <Link to="/build?mode=manual">
-            <Button variant="secondary" size="lg" className="w-full">
-              Montar Manualmente
             </Button>
           </Link>
         </div>
@@ -47,7 +36,7 @@ const HomePage: React.FC = () => {
             { title: "Recomendações Inteligentes", text: "Nossa IA analisa suas necessidades para sugerir os melhores componentes, considerando até mesmo as condições ambientais do seu espaço.", icon: "🧠" },
             { title: "Economia de Tempo e Dinheiro", text: "Otimizamos sua build para o seu orçamento, ajudando você a fazer escolhas inteligentes e encontrar bons negócios (links de compra em breve!).", icon: "💰" },
             { title: "Fácil de Usar", text: "Interface intuitiva e um chatbot amigável tornam o processo de montagem simples, mesmo para iniciantes.", icon: "✨" },
-            { title: "Compatibilidade Garantida", text: "Verificamos a compatibilidade entre as peças para evitar dores de cabeça na hora da montagem.", icon: "🔧" },
+            { title: "Compatibilidade Garantida", text: "Nossa IA verifica a compatibilidade entre as peças para evitar dores de cabeça na hora da montagem.", icon: "🔧" },
           ].map(feature => (
             <li key={feature.title} className="bg-primary/50 p-4 rounded-lg flex items-start space-x-3 shadow-md">
               <span className="text-2xl">{feature.icon}</span>
