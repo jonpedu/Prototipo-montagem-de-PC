@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Build, SelectedComponent, PCComponent } from '../../types';
+import { Build, SelectedComponent, PCComponent, AnamnesisData } from '../../types';
 import Button from '../core/Button';
 import { MOCK_COMPONENTS } from '../../constants/components';
 
@@ -25,12 +25,43 @@ const ComponentItem: React.FC<{ component: SelectedComponent }> = ({ component }
   </li>
 );
 
+const getDisplayKeyForSummary = (key: string): string => {
+    const map: Record<string, string> = {
+        machineType: 'Tipo de Máquina', purpose: 'Propósito Principal', gamingType: 'Tipo de Jogos',
+        monitorSpecs: 'Monitor (Jogos)', peripheralsNeeded: 'Periféricos (Jogos)',
+        workField: 'Área de Trabalho', softwareUsed: 'Softwares Utilizados',
+        multipleMonitors: 'Múltiplos Monitores', monitorCount: 'Qtd. Monitores',
+        creativeEditingType: 'Tipo de Edição Criativa', creativeWorkResolution: 'Resolução (Edição)',
+        projectSize: 'Tamanho Projetos (Edição)', buildExperience: 'Experiência de Montagem',
+        brandPreference: 'Preferência de Marcas', aestheticsImportance: 'Importância da Estética',
+        serverType: 'Tipo de Servidor', serverUsers: 'Usuários (Servidor)',
+        serverRedundancy: 'Redundância (Servidor)', serverUptime: 'Uptime (Servidor)',
+        serverScalability: 'Escalabilidade (Servidor)', miningCrypto: 'Criptomoedas',
+        miningHashrate: 'Hashrate (Mineração)', miningGpuCount: 'GPUs (Mineração)',
+        miningEnergyCost: 'Custo Energia (Mineração)', budget: 'Orçamento (Valor)', budgetRange: 'Faixa de Orçamento',
+        city: 'Cidade (Detectada)', countryCode: 'País (Detectado)', 
+        cityAvgTemp: 'Temp. Média Cidade', cityMaxTemp: 'Temp. Máx. Cidade', cityWeatherDescription: 'Clima na Cidade',
+        pcVentilation: 'Ventilação PC (Local)', pcDustLevel: 'Poeira PC (Local)',
+        pcRoomType: 'Cômodo PC (Local)', envTempControl: 'Controle Temp. (Geral)',
+        envDust: 'Poeira (Geral)', caseSize: 'Tamanho Gabinete',
+        noiseLevel: 'Nível de Ruído', specificPorts: 'Portas Específicas',
+        preferences: 'Preferências Adicionais', isCustomType: 'Tipo Customizado?',
+        customDescription: 'Descrição (Custom)', criticalComponents: 'Componentes Críticos (Custom)',
+        usagePatterns: 'Padrões de Uso (Custom)', physicalConstraints: 'Restrições Físicas (Custom)',
+        specialRequirements: 'Requisitos Especiais (Custom)', referenceSystems: 'Sistemas de Referência (Custom)',
+        envTemperature: 'Temperatura (Legado)', envHumidity: 'Umidade (Legado)', workType: 'Tipo de Trabalho (Legado)'
+    };
+    if (map[key]) return map[key];
+    let display = key.replace(/([A-Z])/g, ' $1'); // Add space before uppercase letters
+    return display.charAt(0).toUpperCase() + display.slice(1); // Capitalize first letter
+};
+
+
 const BuildSummary: React.FC<BuildSummaryProps> = ({ build, isLoading, onSaveBuild, onExportBuild, aiRecommendationNotes }) => {
   if (isLoading) {
     return (
       <div className="bg-secondary p-6 rounded-lg shadow-xl text-center">
         <h3 className="text-2xl font-semibold text-accent mb-4">Gerando sua build...</h3>
-        {/* You can use LoadingSpinner here if you have one */}
         <div className="animate-pulse">
           <div className="h-8 bg-neutral-dark rounded w-3/4 mx-auto mb-4"></div>
           <div className="h-6 bg-neutral-dark rounded w-1/2 mx-auto mb-6"></div>
@@ -55,11 +86,10 @@ const BuildSummary: React.FC<BuildSummaryProps> = ({ build, isLoading, onSaveBui
     return MOCK_COMPONENTS.find(c => c.id === componentId);
   };
 
-  // Ensure components in the build have full details if they were stored as IDs
   const detailedComponents = build.components.map(c => {
-    if (c.name && c.price) return c; // Already detailed
+    if (c.name && c.price) return c; 
     const fullDetails = getFullComponentDetails(c.id);
-    return fullDetails || c; // Fallback to c if not found, though it should be
+    return fullDetails || c; 
   }) as SelectedComponent[];
 
   const totalPrice = detailedComponents.reduce((sum, component) => sum + component.price, 0);
@@ -116,8 +146,22 @@ const BuildSummary: React.FC<BuildSummaryProps> = ({ build, isLoading, onSaveBui
        {build.requirements && (
          <div className="mt-6 p-4 bg-primary/50 border border-neutral-dark/50 rounded-md text-xs">
             <h4 className="font-semibold text-accent mb-1">Requisitos Usados para esta Build:</h4>
-            <ul className="list-disc list-inside">
-                {Object.entries(build.requirements).map(([key, value]) => value ? <li key={key}><span className="font-medium capitalize">{key.replace(/([A-Z])/g, ' $1')}:</span> {value}</li> : null )}
+            <ul className="list-disc list-inside space-y-0.5">
+                {Object.entries(build.requirements)
+                  .filter(([key, value]) => value !== undefined && value !== null && value !== '' && !(typeof value === 'boolean' && !value))
+                  .sort(([keyA], [keyB]) => getDisplayKeyForSummary(keyA).localeCompare(getDisplayKeyForSummary(keyB)))
+                  .map(([key, value]) => {
+                    let displayValue = String(value);
+                    if (typeof value === 'boolean') displayValue = value ? 'Sim' : 'Não';
+                    if (key === 'cityAvgTemp' || key === 'cityMaxTemp') displayValue += '°C';
+                    if (key === 'budget' && typeof value === 'number') displayValue = `R$ ${value.toFixed(2)}`;
+
+                    return (
+                        <li key={key}>
+                            <span className="font-medium">{getDisplayKeyForSummary(key)}:</span> {displayValue}
+                        </li>
+                    );
+                })}
             </ul>
         </div>
        )}
@@ -126,4 +170,3 @@ const BuildSummary: React.FC<BuildSummaryProps> = ({ build, isLoading, onSaveBui
 };
 
 export default BuildSummary;
-    

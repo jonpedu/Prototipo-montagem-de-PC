@@ -34,17 +34,39 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setIsLoading(false);
   }, []);
 
-  const login = useCallback(async (name: string, email: string) => {
+  const handleAuthSuccessNavigation = () => {
+    const navState = location.state as any;
+    const fromLocation = navState?.from;
+    const pendingActionFromLogin = fromLocation?.state?.pendingAction;
+    const originalPath = fromLocation?.pathname || '/dashboard';
+
+    if (pendingActionFromLogin && (originalPath === '/build' || originalPath.startsWith('/build/'))) {
+        // If there was a pending action (save/export) and user was on BuildPage
+        navigate(originalPath, { replace: true, state: { fromLogin: true, action: pendingActionFromLogin } });
+    } else {
+        // Default navigation
+        navigate(originalPath, { replace: true });
+    }
+  };
+
+  const login = useCallback(async (nameOrEmail: string, emailOrPassword?: string) => { // Adjusted for flexibility
     setIsLoading(true);
     // Simulate API call
     await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // Determine actual name and email based on how it's called
+    // In current AuthPage, name is not sent for login, email is in 'nameOrEmail', password in 'emailOrPassword'
+    // For simplicity, we'll use nameOrEmail as the email if emailOrPassword is provided (login scenario)
+    // If only nameOrEmail is provided (potentially registration scenario), it's the name.
+    // This is a bit of a hack due to simplified login, ideally login would only take email/password.
+    const email = emailOrPassword ? nameOrEmail : 'user@example.com'; // Mock email if not passed explicitly for login
+    const name = emailOrPassword ? 'Usuário' : nameOrEmail; // Mock name if only email/pass passed
+
     const user: User = { id: Date.now().toString(), name, email };
     setCurrentUser(user);
     localStorage.setItem('currentUser', JSON.stringify(user));
     setIsLoading(false);
-    // Redirect to dashboard or intended page
-    const from = (location.state as any)?.from?.pathname || '/dashboard';
-    navigate(from, { replace: true });
+    handleAuthSuccessNavigation();
   }, [navigate, location.state]);
 
   const register = useCallback(async (name: string, email: string) => {
@@ -60,13 +82,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setCurrentUser(user);
     localStorage.setItem('currentUser', JSON.stringify(user));
     setIsLoading(false);
-    navigate('/dashboard', { replace: true });
-  }, [navigate]);
+    handleAuthSuccessNavigation();
+  }, [navigate, location.state]);
 
 
   const logout = useCallback(() => {
     setCurrentUser(null);
     localStorage.removeItem('currentUser');
+    sessionStorage.removeItem('proceededAnonymously'); // Clear this on logout
+    // also clear pending build info if any, though it should be cleared by BuildPage
+    sessionStorage.removeItem('pendingBuild'); 
+    sessionStorage.removeItem('pendingAiNotes');
     navigate('/');
   }, [navigate]);
 
@@ -84,4 +110,3 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
-    

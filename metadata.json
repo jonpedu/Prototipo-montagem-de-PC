@@ -1,6 +1,6 @@
 {
-  "name": "Prototipo V2 - CodeTugaBuilds - Montador de PCs Inteligente",
-  "description": "Uma aplicação web para facilitar a montagem de computadores personalizados com recomendações inteligentes baseadas em IA, considerando necessidades, orçamento e condições ambientais.",
+  "name": "versão 3- CodeTugaBuilds - Montador de PCs Inteligente",
+  "description": "implementando a api de clima e potencialmente a função de salvar builds para não logados",
   "requestFramePermissions": [],
   "prompt": ""
 }

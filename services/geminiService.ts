@@ -36,13 +36,20 @@ export const getChatbotResponse = async (
   if (!API_KEY) return { aiResponse: "Desculpe, o serviço de IA não está configurado corretamente (sem API Key).", updatedAnamnesis: currentAnamnesis };
 
   const chatHistoryForGemini: Content[] = history.map(msg => ({
-    role: msg.sender === 'user' ? 'user' : (msg.sender === 'ai' ? 'model' : 'user'),
+    role: msg.sender === 'user' ? 'user' : (msg.sender === 'ai' ? 'model' : 'user'), // System messages are treated as user for history to guide AI
     parts: [{ text: msg.text }],
   }));
+
+  // Include city weather data in the system instruction if available
+  let weatherInfoForSystem = "";
+  if (currentAnamnesis.city && currentAnamnesis.cityMaxTemp !== undefined && currentAnamnesis.cityAvgTemp !== undefined) {
+    weatherInfoForSystem = `Dados climáticos para ${currentAnamnesis.city}: Temp. Média ${currentAnamnesis.cityAvgTemp}°C, Máx ${currentAnamnesis.cityMaxTemp}°C. Clima: ${currentAnamnesis.cityWeatherDescription || 'N/A'}. Considere isso para refrigeração.`;
+  }
 
   const systemInstruction = `Você é CodeTuga, um assistente especializado em montagem de PCs. Siga este fluxo inteligente para coleta de requisitos:
 
 ESTADO ATUAL DA COLETA: ${JSON.stringify(currentAnamnesis)}
+${weatherInfoForSystem ? `\nINFORMAÇÃO CLIMÁTICA DISPONÍVEL: ${weatherInfoForSystem}` : ''}
 
 FLUXO DE PERGUNTAS INTELIGENTE:
 
@@ -104,7 +111,7 @@ FLUXO DE PERGUNTAS INTELIGENTE:
     (Pode ser um PC dedicado para streaming ou um PC de jogos/trabalho que também fará streaming)
     -   Se \`!currentAnamnesis.purpose\`: "Este PC será exclusivamente para streaming ou também para jogar/trabalhar enquanto faz stream? (Dedicado para Stream, Jogos+Stream, Trabalho+Stream)"
     -   (Se Jogos+Stream, siga o fluxo de Jogos, adicionando perguntas sobre qualidade de stream. Se Trabalho+Stream, siga o fluxo de Trabalho)
-    -   Se \`!currentAnamnesis.preferences\` (ou se precisa de mais detalhes): "Qual a qualidade e resolução de stream que você almeja? (Ex: 720p/30fps, 1080p/60fps) Precisa de placa de captura?"
+    -   Se \`!currentAnamnesis.preferences\` (ou se precisa de mais detalhes sobre streaming): "Qual a qualidade e resolução de stream que você almeja? (Ex: 720p/30fps, 1080p/60fps) Precisa de placa de captura?"
 
     ### Para Tipos Não Previstos/Customizados (\`currentAnamnesis.isCustomType === true\`):
     (Este fluxo é ativado se o machineType inicial não for reconhecido e for marcado como customizado)
@@ -119,19 +126,19 @@ FLUXO DE PERGUNTAS INTELIGENTE:
 3.  **Orçamento** (coletar após entender as necessidades principais do tipo de máquina, se \`!currentAnamnesis.budget\` e \`!currentAnamnesis.budgetRange\`):
     Pergunte: "Com base no que conversamos, qual faixa de orçamento você tem em mente para esta máquina em BRL (Reais)? (Ex: Econômico [até R$4000], Médio [R$4000-R$8000], High-End [R$8000+], ou se preferir, diga um valor específico para 'Personalizar')"
 
-4.  **Permissão de Localização** (após orçamento, se \`!currentAnamnesis.city\` E a pergunta ainda não foi feita):
+4.  **Permissão de Localização** (após orçamento, se \`!currentAnamnesis.city\` E a pergunta ainda não foi feita E \`!currentAnamnesis.cityMaxTemp\` /* Evita perguntar se já temos dados de clima */):
     Pergunte EXATAMENTE: "Para ajudar com as condições climáticas e otimizar as sugestões de refrigeração e gabinete, você permite que detectemos sua localização automaticamente?" 
     (O frontend tratará a resposta. Não processe diretamente. Espere a próxima entrada do usuário que será uma mensagem do sistema.)
 
-5.  **Condições Ambientais Específicas do Local do PC** (se \`currentAnamnesis.city\` existe E os detalhes do local do PC ainda não foram coletados):
+5.  **Condições Ambientais Específicas do Local do PC** (se \`currentAnamnesis.city\` existe E os detalhes do local do PC ainda não foram coletados COMPLETAMENTE):
     *   Se \`!currentAnamnesis.pcVentilation\`: "Sobre o local específico onde a máquina será usada: ele possui ar condicionado, ventilador, ou a ventilação depende principalmente da temperatura externa? (Responda com 'Ar Condicionado', 'Ventilador', 'Temperatura Externa' ou 'Outro')"
     *   Se \`currentAnamnesis.pcVentilation\` E \`!currentAnamnesis.pcDustLevel\`: "E quanto ao nível de poeira nesse local específico onde a máquina ficará? (Responda com Baixa, Média ou Alta)"
     *   Se \`currentAnamnesis.pcVentilation\` E \`currentAnamnesis.pcDustLevel\` E \`!currentAnamnesis.pcRoomType\`: "Em qual cômodo a máquina será utilizada principalmente? (Ex: Quarto, Sala, Escritório)"
 
-6.  **Condições Ambientais Gerais** (se permissão de localização foi negada/falhou, \`!currentAnamnesis.city\`, OU para tipos como Servidor/Mineração se não perguntado antes, E as condições gerais ainda não foram coletadas):
+6.  **Condições Ambientais Gerais** (se permissão de localização foi negada/falhou, \`!currentAnamnesis.city\`, OU para tipos como Servidor/Mineração se não perguntado antes, E as condições gerais ainda não foram coletadas COMPLETAMENTE):
     *   Se \`!currentAnamnesis.envTempControl\`: "O ambiente geral onde a máquina ficará tem algum controle de temperatura, como ar condicionado ou é mais dependente da ventilação natural?"
     *   Se \`currentAnamnesis.envTempControl\` E \`!currentAnamnesis.envDust\`: "Qual o nível de poeira geral nesse ambiente? (Baixa, Média, Alta)"
-    *   Para Mineração (se não perguntado e relevante): "O local de mineração é bem ventilado, especialmente para as GPUs?" (Pode ir para \`preferences\` ou \`pcVentilation\`)
+    *   Para Mineração (se não perguntado e relevante, e \`!currentAnamnesis.preferences\` ou similar não cobre): "O local de mineração é bem ventilado, especialmente para as GPUs?" (Pode ir para \`preferences\` ou \`pcVentilation\`)
 
 7.  **Preferências Adicionais Gerais** (após as etapas anteriores, se algo ainda pode ser relevante ou se \`!currentAnamnesis.preferences\` para coletar gostos gerais):
     - Se \`!currentAnamnesis.caseSize\`: "Você tem preferência pelo tamanho do gabinete? (Ex: Mini-ITX para compacto, Micro-ATX, ATX padrão, Full Tower para máximo espaço)"
@@ -145,9 +152,9 @@ FLUXO DE PERGUNTAS INTELIGENTE:
 
 REGRAS DE INTERAÇÃO:
 - Faça UMA pergunta por vez.
-- Adapte o vocabulário ao nível técnico aparente do usuário. Se o usuário usar termos técnicos, você pode usar também. Se parecer leigo, simplifique.
+- Adapte o vocabulário ao nível técnico aparente do usuário.
 - Confirme informações importantes brevemente se o usuário der uma resposta ambígua.
-- Ofereça exemplos curtos entre parênteses quando apropriado para clarificar a pergunta.
+- Ofereça exemplos curtos entre parênteses quando apropriado.
 - Mantenha o foco no fluxo lógico. Não pule etapas a menos que o estado atual (\`currentAnamnesis\`) já tenha a informação.
 - Responda APENAS com a sua próxima pergunta ou a validação final. Evite saudações repetitivas.
 - Se o usuário fornecer múltiplas informações de uma vez, tente processá-las para os campos correspondentes em \`currentAnamnesis\` e então faça a PRÓXIMA pergunta do fluxo que ainda não foi respondida.
@@ -175,9 +182,12 @@ REGRAS DE INTERAÇÃO:
         if (lastMessage.sender === 'ai') {
             lastAiQuestionText = lastMessage.text.toLowerCase();
         } else if (history.length > 1) { 
-            const secondLastMessage = history[history.length -2];
-            if(secondLastMessage.sender === 'ai') {
-                 lastAiQuestionText = secondLastMessage.text.toLowerCase();
+            // Check if the message before the last user message was from AI
+            // This handles cases where a system message might be the last in history array
+            // before the current user input is added to contents for Gemini.
+            const potentialAiMessage = [...history].reverse().find(m => m.sender === 'ai'); // Replaced findLast
+            if(potentialAiMessage) {
+                 lastAiQuestionText = potentialAiMessage.text.toLowerCase();
             }
         }
     }
@@ -233,69 +243,72 @@ REGRAS DE INTERAÇÃO:
         // Jogos Sub-flow
         if (updatedAnamnesis.purpose === 'Jogos') {
             if (lastAiQuestionText.includes("que tipo de jogos você pretende jogar?") && !updatedAnamnesis.gamingType) {
-                const gameTypeMap: Record<string, GamingType> = { 'competitivo': 'Competitivos/eSports', 'esports': 'Competitivos/eSports', 'aaa': 'AAA/High-End', 'high-end': 'AAA/High-End', 'vr': 'VR', 'casual': 'Casual', 'outro': 'Outro'};
+                const gameTypeMap: Record<string, GamingType> = { 'competitivo': 'Competitivos/eSports', 'esports': 'Competitivos/eSports', 'aaa': 'AAA/High-End', 'high-end': 'AAA/High-End', 'vr': 'VR', 'realidade virtual': 'VR', 'casual': 'Casual', 'outro': 'Outro'};
                 updatedAnamnesis.gamingType = parseGenericOptions(lowerInput, gameTypeMap) as GamingType;
             }
             if (lastAiQuestionText.includes("qual resolução e taxa de atualização do seu monitor?") && !updatedAnamnesis.monitorSpecs) {
-                updatedAnamnesis.monitorSpecs = userInput;
+                if(userInput.length > 3) updatedAnamnesis.monitorSpecs = userInput; // Capture any reasonable input
             }
             if (lastAiQuestionText.includes("precisa de periféricos específicos?") && !updatedAnamnesis.peripheralsNeeded) {
-                const peripheralMap: Record<string, 'Sim' | 'Não'> = { 'sim': 'Sim', 'preciso': 'Sim', 'não': 'Não', 'nao': 'Não'};
+                const peripheralMap: Record<string, 'Sim' | 'Não'> = { 'sim': 'Sim', 'preciso': 'Sim', 's': 'Sim', 'não': 'Não', 'nao': 'Não', 'n': 'Não'};
                 updatedAnamnesis.peripheralsNeeded = parseGenericOptions(lowerInput, peripheralMap) as 'Sim' | 'Não' || 'Não especificado';
             }
         }
         // Trabalho/Produtividade Sub-flow
         if (updatedAnamnesis.purpose === 'Trabalho/Produtividade') {
             if (lastAiQuestionText.includes("qual sua área de trabalho?") && !updatedAnamnesis.workField) {
-                 const workFieldMap: Record<string, WorkField> = {'desenvolvimento': 'Desenvolvimento', 'design gráfico': 'Design Gráfico', 'engenharia': 'Engenharia/3D', '3d': 'Engenharia/3D', 'escritório': 'Escritório', 'ciência de dados': 'Ciência de Dados', 'outro': 'Outro'};
+                 const workFieldMap: Record<string, WorkField> = {'desenvolvimento': 'Desenvolvimento', 'programação': 'Desenvolvimento', 'design gráfico': 'Design Gráfico', 'design': 'Design Gráfico', 'engenharia': 'Engenharia/3D', '3d': 'Engenharia/3D', 'cad': 'Engenharia/3D', 'escritório': 'Escritório', 'office': 'Escritório', 'ciência de dados': 'Ciência de Dados', 'dados': 'Ciência de Dados', 'outro': 'Outro'};
                  updatedAnamnesis.workField = parseGenericOptions(lowerInput, workFieldMap) as WorkField;
-                 if (!updatedAnamnesis.workField && userInput.length > 3) updatedAnamnesis.workField = userInput as WorkField; // Capture if not mapped
+                 if (!updatedAnamnesis.workField && userInput.length > 3) updatedAnamnesis.workField = userInput as WorkField; // Capture if not mapped but specific
             }
             if (lastAiQuestionText.includes("quais softwares principais você usa?") && !updatedAnamnesis.softwareUsed && userInput.length > 3) {
                 updatedAnamnesis.softwareUsed = userInput;
             }
             if (lastAiQuestionText.includes("precisa de suporte para múltiplos monitores?") && !updatedAnamnesis.multipleMonitors) {
-                const multiMonitorMap: Record<string, 'Sim' | 'Não'> = { 'sim': 'Sim', 'preciso': 'Sim', 'não': 'Não', 'nao': 'Não' };
+                const multiMonitorMap: Record<string, 'Sim' | 'Não'> = { 'sim': 'Sim', 'preciso': 'Sim', 's': 'Sim', 'não': 'Não', 'nao': 'Não', 'n':'Não' };
                 updatedAnamnesis.multipleMonitors = parseGenericOptions(lowerInput, multiMonitorMap) as 'Sim' | 'Não' || 'Não especificado';
             }
             if (lastAiQuestionText.includes("quantos monitores você pretende usar?") && updatedAnamnesis.multipleMonitors === 'Sim' && !updatedAnamnesis.monitorCount) {
                 const countMatch = userInput.match(/\d+/);
                 if (countMatch) updatedAnamnesis.monitorCount = parseInt(countMatch[0], 10);
+                else if (lowerInput.includes("dois") || lowerInput.includes("2")) updatedAnamnesis.monitorCount = 2;
+                else if (lowerInput.includes("três") || lowerInput.includes("tres") || lowerInput.includes("3")) updatedAnamnesis.monitorCount = 3;
             }
         }
         // Edição Criativa Sub-flow
         if (updatedAnamnesis.purpose === 'Edição Criativa') {
             if (lastAiQuestionText.includes("qual tipo de edição criativa") && !updatedAnamnesis.creativeEditingType) {
-                const creativeTypeMap: Record<string, CreativeEditingType> = {'vídeo': 'Vídeo', 'foto': 'Foto', 'áudio': 'Áudio', '3d': '3D', 'modelagem 3d': '3D', 'outro': 'Outro'};
+                const creativeTypeMap: Record<string, CreativeEditingType> = {'vídeo': 'Vídeo', 'video': 'Vídeo', 'foto': 'Foto', 'fotografia': 'Foto', 'áudio': 'Áudio', 'audio': 'Áudio', '3d': '3D', 'modelagem 3d': '3D', 'outro': 'Outro'};
                 updatedAnamnesis.creativeEditingType = parseGenericOptions(lowerInput, creativeTypeMap) as CreativeEditingType;
             }
             if (lastAiQuestionText.includes("qual a resolução de trabalho principal") && !updatedAnamnesis.creativeWorkResolution) {
-                const resolutionMap: Record<string, CreativeWorkResolution> = {'hd': 'HD', 'fullhd': 'HD', '1080': 'HD', '4k': '4K', '8k': '8K', 'outro': 'Outro'};
+                const resolutionMap: Record<string, CreativeWorkResolution> = {'hd': 'HD', 'fullhd': 'HD', '1080': 'HD', '1080p': 'HD', '4k': '4K', 'ultrahd': '4K', '8k': '8K', 'outro': 'Outro'};
                 updatedAnamnesis.creativeWorkResolution = parseGenericOptions(lowerInput, resolutionMap) as CreativeWorkResolution;
                  if (!updatedAnamnesis.creativeWorkResolution && userInput.length > 1) updatedAnamnesis.creativeWorkResolution = userInput as CreativeWorkResolution;
             }
             if (lastAiQuestionText.includes("qual o tamanho médio dos seus projetos?") && !updatedAnamnesis.projectSize) {
-                const projectSizeMap: Record<string, ProjectSize> = {'pequeno': 'Pequeno', 'médio': 'Médio', 'grande': 'Grande'};
+                const projectSizeMap: Record<string, ProjectSize> = {'pequeno': 'Pequeno', 'médio': 'Médio', 'medio': 'Médio', 'grande': 'Grande'};
                 updatedAnamnesis.projectSize = parseGenericOptions(lowerInput, projectSizeMap) as ProjectSize;
             }
         }
         // Experiência do Usuário (Computador Pessoal)
         if (lastAiQuestionText.includes("prefere montar o pc sozinho") && !updatedAnamnesis.buildExperience) {
-            const buildExpMap: Record<string, BuildExperience> = {'sozinho': 'Montar Sozinho', 'montar': 'Montar Sozinho', 'pré-configurado': 'Pré-configurado', 'pronto': 'Pré-configurado'};
+            const buildExpMap: Record<string, BuildExperience> = {'sozinho': 'Montar Sozinho', 'montar': 'Montar Sozinho', 'eu monto': 'Montar Sozinho', 'pré-configurado': 'Pré-configurado', 'pronto': 'Pré-configurado', 'montado': 'Pré-configurado'};
             updatedAnamnesis.buildExperience = parseGenericOptions(lowerInput, buildExpMap) as BuildExperience;
         }
         if (lastAiQuestionText.includes("preferência por marcas específicas") && !updatedAnamnesis.brandPreference) {
-            if (userInput.length > 2) updatedAnamnesis.brandPreference = userInput;
+            if (userInput.length > 2 && !lowerInput.includes("não") && !lowerInput.includes("nenhuma")) updatedAnamnesis.brandPreference = userInput;
+            else if (lowerInput.includes("não") || lowerInput.includes("nenhuma")) updatedAnamnesis.brandPreference = "Nenhuma";
         }
         if (lastAiQuestionText.includes("importância da estética") && !updatedAnamnesis.aestheticsImportance) {
-            const aestheticsMap: Record<string, AestheticsImportance> = {'baixa': 'Baixa', 'média': 'Média', 'alta': 'Alta'};
+            const aestheticsMap: Record<string, AestheticsImportance> = {'baixa': 'Baixa', 'pouca': 'Baixa', 'média': 'Média', 'media': 'Média', 'mais ou menos': 'Média', 'alta': 'Alta', 'muita': 'Alta'};
             updatedAnamnesis.aestheticsImportance = parseGenericOptions(lowerInput, aestheticsMap) as AestheticsImportance;
         }
     }
     // Servidor
     else if (updatedAnamnesis.machineType === 'Servidor') {
         if (lastAiQuestionText.includes("propósito principal do servidor?") && !updatedAnamnesis.serverType) {
-            const serverTypeMap: Record<string, ServerType> = {'arquivos': 'Arquivos', 'web': 'Web', 'banco de dados': 'Banco de Dados', 'bd': 'Banco de Dados', 'virtualização': 'Virtualização', 'vm': 'Virtualização', 'render farm': 'Render Farm', 'render': 'Render Farm', 'outro': 'Outro'};
+            const serverTypeMap: Record<string, ServerType> = {'arquivos': 'Arquivos', 'arquivo': 'Arquivos', 'file server': 'Arquivos', 'web': 'Web', 'site': 'Web', 'banco de dados': 'Banco de Dados', 'bd': 'Banco de Dados', 'database': 'Banco de Dados', 'virtualização': 'Virtualização', 'vm': 'Virtualização', 'render farm': 'Render Farm', 'render': 'Render Farm', 'outro': 'Outro'};
             updatedAnamnesis.serverType = parseGenericOptions(lowerInput, serverTypeMap) as ServerType;
         }
         if (lastAiQuestionText.includes("número estimado de usuários") && !updatedAnamnesis.serverUsers && userInput.length > 0) {
@@ -305,27 +318,39 @@ REGRAS DE INTERAÇÃO:
             updatedAnamnesis.serverRedundancy = userInput;
         }
         if (lastAiQuestionText.includes("nível de uptime") && !updatedAnamnesis.serverUptime) {
-            const uptimeMap: Record<string, ServerUptime> = {'99%': '99%', '99.9%': '99.9%', '99.99%': '99.99%', 'outro': 'Outro'};
+            const uptimeMap: Record<string, ServerUptime> = {'99%': '99%', '99.9%': '99.9%', '99,9%': '99.9%', '99.99%': '99.99%', '99,99%': '99.99%', 'outro': 'Outro'};
             updatedAnamnesis.serverUptime = parseGenericOptions(lowerInput, uptimeMap) as ServerUptime;
              if (!updatedAnamnesis.serverUptime && userInput.length > 1) updatedAnamnesis.serverUptime = userInput as ServerUptime;
         }
         if (lastAiQuestionText.includes("capacidade de expansão futura") && !updatedAnamnesis.serverScalability) {
-            const scalabilityMap: Record<string, ServerScalability> = {'baixa': 'Baixa', 'média': 'Média', 'alta': 'Alta'};
+            const scalabilityMap: Record<string, ServerScalability> = {'baixa': 'Baixa', 'pouca': 'Baixa', 'média': 'Média', 'media': 'Média', 'alta': 'Alta', 'muita': 'Alta'};
             updatedAnamnesis.serverScalability = parseGenericOptions(lowerInput, scalabilityMap) as ServerScalability;
         }
     }
-    // Estação de Trabalho - might share logic with PC/Trabalho or Edição Criativa
+    // Estação de Trabalho
     else if (updatedAnamnesis.machineType === 'Estação de Trabalho') {
         if (lastAiQuestionText.includes("principal carga de trabalho desta estação de trabalho") && !updatedAnamnesis.workField && !updatedAnamnesis.creativeEditingType) {
-            // This is a bit complex as it can map to either workField or creativeEditingType
-            // For simplicity, let's try to map to workField first or store in preferences
             const workFieldMap: Record<string, WorkField> = {'cad': 'Engenharia/3D', 'engenharia': 'Engenharia/3D', 'análise de dados': 'Ciência de Dados', 'renderização 3d': 'Engenharia/3D', 'desenvolvimento com vms': 'Desenvolvimento', 'outro': 'Outro'};
+            const creativeTypeMap: Record<string, CreativeEditingType> = {'vídeo': 'Vídeo', 'foto': 'Foto', 'áudio': 'Áudio', '3d': '3D', 'modelagem 3d': '3D', 'outro': 'Outro'};
+            
             updatedAnamnesis.workField = parseGenericOptions(lowerInput, workFieldMap) as WorkField;
-            if (!updatedAnamnesis.workField) updatedAnamnesis.preferences = (updatedAnamnesis.preferences ? updatedAnamnesis.preferences + "; " : "") + `Carga Estação de Trabalho: ${userInput}`;
+            if(!updatedAnamnesis.workField) updatedAnamnesis.creativeEditingType = parseGenericOptions(lowerInput, creativeTypeMap) as CreativeEditingType;
+
+            if (!updatedAnamnesis.workField && !updatedAnamnesis.creativeEditingType && userInput.length > 3) {
+                 updatedAnamnesis.preferences = (updatedAnamnesis.preferences ? updatedAnamnesis.preferences + "; " : "") + `Carga Estação de Trabalho: ${userInput}`;
+            }
         }
-        // Subsequent questions for software, monitors for Estação de Trabalho would follow similar parsing to PC/Trabalho.
+        // Subsequent questions for software, monitors for Estação de Trabalho
         if (lastAiQuestionText.includes("quais softwares principais você usa?") && !updatedAnamnesis.softwareUsed && userInput.length > 3) {
             updatedAnamnesis.softwareUsed = userInput;
+        }
+        if (lastAiQuestionText.includes("precisa de suporte para múltiplos monitores?") && !updatedAnamnesis.multipleMonitors) {
+            const multiMonitorMap: Record<string, 'Sim' | 'Não'> = { 'sim': 'Sim', 's': 'Sim', 'não': 'Não', 'n': 'Não' };
+            updatedAnamnesis.multipleMonitors = parseGenericOptions(lowerInput, multiMonitorMap) as 'Sim' | 'Não' || 'Não especificado';
+        }
+        if (lastAiQuestionText.includes("quantos monitores você pretende usar?") && updatedAnamnesis.multipleMonitors === 'Sim' && !updatedAnamnesis.monitorCount) {
+            const countMatch = userInput.match(/\d+/);
+            if (countMatch) updatedAnamnesis.monitorCount = parseInt(countMatch[0], 10);
         }
     }
     // Máquina para Mineração
@@ -346,78 +371,84 @@ REGRAS DE INTERAÇÃO:
     // PC para Streaming
     else if (updatedAnamnesis.machineType === 'PC para Streaming') {
          if (lastAiQuestionText.includes("exclusivamente para streaming ou também para jogar/trabalhar") && !updatedAnamnesis.purpose) {
-            // For simplicity, store this specific input in preferences for now, or create a new 'streamingFocus' field
-            updatedAnamnesis.preferences = (updatedAnamnesis.preferences ? updatedAnamnesis.preferences + "; " : "") + `Foco Streaming: ${userInput}`;
-            if(lowerInput.includes("jogos") || lowerInput.includes("game")) updatedAnamnesis.purpose = "Jogos"; // To guide subsequent questions
+            if(lowerInput.includes("jogos") || lowerInput.includes("game")) updatedAnamnesis.purpose = "Jogos";
             else if(lowerInput.includes("trabalho")) updatedAnamnesis.purpose = "Trabalho/Produtividade";
+            else updatedAnamnesis.purpose = "Outro"; // If dedicated or other
+            updatedAnamnesis.preferences = (updatedAnamnesis.preferences ? updatedAnamnesis.preferences + "; " : "") + `Foco Streaming: ${userInput}`;
         }
-        if (lastAiQuestionText.includes("qualidade e resolução de stream") && (!updatedAnamnesis.preferences || !updatedAnamnesis.preferences.toLowerCase().includes("qualidade de stream"))) {
+        if (lastAiQuestionText.includes("qualidade e resolução de stream") && (!updatedAnamnesis.preferences || !updatedAnamnesis.preferences.toLowerCase().includes("qualidade stream:"))) {
              updatedAnamnesis.preferences = (updatedAnamnesis.preferences ? updatedAnamnesis.preferences + "; " : "") + `Qualidade Stream: ${userInput}`;
         }
     }
     // Custom/Unknown Machine Type Flow
     if (updatedAnamnesis.isCustomType) {
-        if (lastAiQuestionText.includes("descrever com mais detalhes") && !updatedAnamnesis.customDescription) {
-            updatedAnamnesis.customDescription = userInput;
+        // Since customDescription might be pre-filled on type detection
+        if (lastAiQuestionText.includes("descrever com mais detalhes") && (!updatedAnamnesis.customDescription || updatedAnamnesis.customDescription === userInput /* avoid re-assigning if already set by type detection */ )) {
+            if(userInput.length > 3) updatedAnamnesis.customDescription = userInput;
         } else if (lastAiQuestionText.includes("sistema similar no mercado") && !updatedAnamnesis.referenceSystems) {
-            updatedAnamnesis.referenceSystems = userInput;
+            if(userInput.length > 3) updatedAnamnesis.referenceSystems = userInput;
         } else if (lastAiQuestionText.includes("componentes ou características mais críticos") && !updatedAnamnesis.criticalComponents) {
-            updatedAnamnesis.criticalComponents = userInput;
+            if(userInput.length > 3) updatedAnamnesis.criticalComponents = userInput;
         } else if (lastAiQuestionText.includes("como você pretende usar essa máquina no dia a dia") && !updatedAnamnesis.usagePatterns) {
-            updatedAnamnesis.usagePatterns = userInput;
+            if(userInput.length > 3) updatedAnamnesis.usagePatterns = userInput;
         } else if (lastAiQuestionText.includes("restrições físicas ou de compatibilidade") && !updatedAnamnesis.physicalConstraints) {
-            updatedAnamnesis.physicalConstraints = userInput;
+            if(userInput.length > 3) updatedAnamnesis.physicalConstraints = userInput;
         } else if (lastAiQuestionText.includes("requisito especializado, software específico ou periférico incomum") && !updatedAnamnesis.specialRequirements) {
-            updatedAnamnesis.specialRequirements = userInput;
+           if(userInput.length > 3)  updatedAnamnesis.specialRequirements = userInput;
         }
     }
     
     // 3. Orçamento
     if (lastAiQuestionText.includes("faixa de orçamento") && (!updatedAnamnesis.budget && !updatedAnamnesis.budgetRange)) {
         const budgetRangesMap: Record<string, { range: AnamnesisData['budgetRange'], value?: number }> = {
-            'econômico': { range: 'Econômico [R$2-4k]', value: 3000 }, // representative value
-            'medio': { range: 'Médio [R$4-8k]', value: 6000 }, // representative value
+            'econômico': { range: 'Econômico [R$2-4k]', value: 3000 }, 
+            'economico': { range: 'Econômico [R$2-4k]', value: 3000 }, 
+            'até 4000': { range: 'Econômico [R$2-4k]', value: 3000 },
+            '2-4k': { range: 'Econômico [R$2-4k]', value: 3000 },
+            'medio': { range: 'Médio [R$4-8k]', value: 6000 }, 
             'médio': { range: 'Médio [R$4-8k]', value: 6000 },
-            'high-end': { range: 'High-End [R$8k+]', value: 10000 }, // representative value
+            '4-8k': { range: 'Médio [R$4-8k]', value: 6000 },
+            'entre 4000 e 8000': { range: 'Médio [R$4-8k]', value: 6000 },
+            'high-end': { range: 'High-End [R$8k+]', value: 10000 }, 
             'high end': { range: 'High-End [R$8k+]', value: 10000 },
+            'acima de 8000': { range: 'High-End [R$8k+]', value: 10000 },
+            '8k+': { range: 'High-End [R$8k+]', value: 10000 },
             'personalizar': { range: 'Personalizar' }
         };
         let matched = false;
         for (const [key, val] of Object.entries(budgetRangesMap)) {
             if (lowerInput.includes(key)) {
                 updatedAnamnesis.budgetRange = val.range;
-                if (val.value) updatedAnamnesis.budget = val.value;
+                if (val.value && !updatedAnamnesis.budget) updatedAnamnesis.budget = val.value; // Prioritize explicit number if given
                 matched = true;
                 break;
             }
         }
-        if (!matched || updatedAnamnesis.budgetRange === 'Personalizar') {
-            const numMatch = userInput.match(/(\d[\d.,]*\d|\d+)/g); // More robust regex for numbers like 2.500,00 or 2500
-            if (numMatch) {
-                const cleanedNumber = parseFloat(numMatch[0].replace(/\./g, '').replace(',', '.'));
-                if (!isNaN(cleanedNumber)) {
-                     updatedAnamnesis.budget = cleanedNumber;
-                     if(!updatedAnamnesis.budgetRange) updatedAnamnesis.budgetRange = 'Personalizar'; // Assume Personalizar if direct number given
-                }
+        
+        const numMatch = userInput.match(/(\d[\d.,]*\d|\d+)/g);
+        if (numMatch) {
+            const cleanedNumber = parseFloat(numMatch[0].replace(/\./g, '').replace(',', '.'));
+            if (!isNaN(cleanedNumber)) {
+                 updatedAnamnesis.budget = cleanedNumber;
+                 if(!updatedAnamnesis.budgetRange) updatedAnamnesis.budgetRange = 'Personalizar'; 
+                 matched = true; // Consider it matched if a number is parsed
             }
         }
-         if(!updatedAnamnesis.budget && updatedAnamnesis.budgetRange !== 'Personalizar' && !matched){ // If no keyword match and no number, maybe it's a specific value
-            const numMatch = userInput.match(/(\d[\d.,]*\d|\d+)/g); 
-            if (numMatch) {
-                const cleanedNumber = parseFloat(numMatch[0].replace(/\./g, '').replace(',', '.'));
-                 if (!isNaN(cleanedNumber)) updatedAnamnesis.budget = cleanedNumber;
-            }
+         if(!matched && userInput.length > 2){ // Catch-all for non-keyword, non-numeric but specific inputs like "uns 5 mil"
+            updatedAnamnesis.preferences = (updatedAnamnesis.preferences ? updatedAnamnesis.preferences + "; " : "") + `Orçamento (descritivo): ${userInput}`;
+            if (!updatedAnamnesis.budgetRange) updatedAnamnesis.budgetRange = 'Personalizar'; // Assume Personalizar
          }
     }
 
-    // 4. Localização (handled by frontend, system message updates anamnesis.city)
+    // 4. Localização (handled by frontend, system message updates anamnesis.city and weather fields)
 
-    // 5. Condições Ambientais Específicas (pcVentilation, pcDustLevel, pcRoomType already covered by existing logic)
-     if (lastAiQuestionText.includes("ar condicionado") || lastAiQuestionText.includes("ventilador") || lastAiQuestionText.includes("ventilação")) {
+    // 5. Condições Ambientais Específicas
+     if (lastAiQuestionText.includes("ar condicionado") || lastAiQuestionText.includes("ventilador") || lastAiQuestionText.includes("ventilação onde a máquina será usada")) {
         if (lowerInput.includes("ar condicionado")) updatedAnamnesis.pcVentilation = "Ar Condicionado";
         else if (lowerInput.includes("ventilador")) updatedAnamnesis.pcVentilation = "Ventilador";
         else if (lowerInput.includes("temperatura externa") || lowerInput.includes("ambiente externo")) updatedAnamnesis.pcVentilation = "Ambiente Externo";
         else if (lowerInput.includes("outro") && !updatedAnamnesis.pcVentilation) updatedAnamnesis.pcVentilation = "Outro";
+        else if (userInput.length > 2 && !updatedAnamnesis.pcVentilation) updatedAnamnesis.pcVentilation = "Outro"; // Catch specific descriptions
     }
     if (lastAiQuestionText.includes("nível de poeira nesse local específico")) {
         updatedAnamnesis.pcDustLevel = parseGenericOptions(lowerInput, FEMININE_DUST_LEVEL_MAP) as 'Baixa' | 'Média' | 'Alta';
@@ -431,35 +462,37 @@ REGRAS DE INTERAÇÃO:
     if (lastAiQuestionText.includes("ambiente geral") && lastAiQuestionText.includes("controle de temperatura") && !updatedAnamnesis.envTempControl) {
         const tempControlMap: Record<string, EnvTempControlType> = {'ar condicionado': 'Ar condicionado', 'ventilação natural': 'Ventilação natural', 'natural': 'Ventilação natural', 'outro': 'Outro'};
         updatedAnamnesis.envTempControl = parseGenericOptions(lowerInput, tempControlMap) as EnvTempControlType;
+        if (!updatedAnamnesis.envTempControl && userInput.length > 2) updatedAnamnesis.envTempControl = "Outro";
     }
     if (lastAiQuestionText.includes("nível de poeira geral nesse ambiente") && !updatedAnamnesis.envDust) {
         updatedAnamnesis.envDust = parseGenericOptions(lowerInput, FEMININE_DUST_LEVEL_MAP) as 'Baixa' | 'Média' | 'Alta';
     }
-     if (lastAiQuestionText.includes("local de mineração é bem ventilado") && (!updatedAnamnesis.preferences || !updatedAnamnesis.preferences.toLowerCase().includes("ventilação mineração"))) {
+     if (lastAiQuestionText.includes("local de mineração é bem ventilado") && (!updatedAnamnesis.preferences || !updatedAnamnesis.preferences.toLowerCase().includes("ventilação mineração:"))) {
         updatedAnamnesis.preferences = (updatedAnamnesis.preferences ? updatedAnamnesis.preferences + "; " : "") + `Ventilação Mineração: ${userInput}`;
     }
 
 
     // 7. Preferências Adicionais Gerais
     if (lastAiQuestionText.includes("tamanho do gabinete") && !updatedAnamnesis.caseSize) {
-        const caseSizeMap: Record<string, CaseSizeType> = {'mini-itx': 'Mini-ITX', 'micro-atx': 'Micro-ATX', 'atx': 'ATX', 'full tower': 'Full Tower', 'outro': 'Outro'};
+        const caseSizeMap: Record<string, CaseSizeType> = {'mini-itx': 'Mini-ITX', 'itx': 'Mini-ITX', 'micro-atx': 'Micro-ATX', 'matx': 'Micro-ATX', 'atx': 'ATX', 'full tower': 'Full Tower', 'grande': 'Full Tower', 'pequeno': 'Mini-ITX', 'médio': 'ATX', 'outro': 'Outro'};
         updatedAnamnesis.caseSize = parseGenericOptions(lowerInput, caseSizeMap) as CaseSizeType;
+        if (!updatedAnamnesis.caseSize && userInput.length > 2) updatedAnamnesis.caseSize = "Outro";
     }
     if (lastAiQuestionText.includes("nível de ruído aceitável") && !updatedAnamnesis.noiseLevel) {
-        const noiseLevelMap: Record<string, NoiseLevelType> = {'silencioso': 'Silencioso', 'moderado': 'Moderado', 'indiferente': 'Indiferente'};
+        const noiseLevelMap: Record<string, NoiseLevelType> = {'silencioso': 'Silencioso', 'baixo': 'Silencioso', 'moderado': 'Moderado', 'médio': 'Moderado', 'indiferente': 'Indiferente', 'tanto faz': 'Indiferente'};
         updatedAnamnesis.noiseLevel = parseGenericOptions(lowerInput, noiseLevelMap) as NoiseLevelType;
     }
     if (lastAiQuestionText.includes("necessidade de portas específicas") && !updatedAnamnesis.specificPorts && userInput.length > 3) {
         updatedAnamnesis.specificPorts = userInput;
     }
-    // General preferences catch-all (also used by some specific flows if no dedicated field)
+    
     if (lastAiQuestionText.includes("outra preferência ou detalhe importante") || lastAiQuestionText.includes("preferência adicional")) {
-       if (!updatedAnamnesis.preferences || userInput.trim().length > 3 ) { 
+       if (userInput.trim().length > 3 && (!updatedAnamnesis.preferences || !updatedAnamnesis.preferences.includes(userInput.trim()))) { 
              updatedAnamnesis.preferences = (updatedAnamnesis.preferences ? updatedAnamnesis.preferences + "; " : "") + userInput.trim();
         }
     }
     
-    // Fallback for older env questions if new ones not explicitly asked yet (less likely with new flow)
+    // Fallback for older env questions (less likely with new flow but for safety)
     if (!updatedAnamnesis.city && !updatedAnamnesis.envTempControl && (lastAiQuestionText.includes("temperatura ambiente") || aiText.toLowerCase().includes("temperatura ambiente")) ) {
         ['baixa', 'média', 'alta'].forEach(level => {
             if(lowerInput.includes(level)) {
@@ -468,9 +501,9 @@ REGRAS DE INTERAÇÃO:
         });
     }
      if (!updatedAnamnesis.city && !updatedAnamnesis.envDust && (lastAiQuestionText.includes("poeira geral no ambiente") || aiText.toLowerCase().includes("poeira geral no ambiente") )) {
-         ['baixa', 'média', 'alta'].forEach(level => { // This was using masculine 'Baixo', 'Medio', 'Alto', but envDust expects feminine
-            if(lowerInput.includes(level)) { // 'level' here is 'baixa', 'média', 'alta'
-                if(!updatedAnamnesis.envDust) { // If envDust is not already set by FEMININE_DUST_LEVEL_MAP
+         ['baixa', 'média', 'alta'].forEach(level => { 
+            if(lowerInput.includes(level)) { 
+                if(!updatedAnamnesis.envDust) { 
                     const feminineLevel = FEMININE_DUST_LEVEL_MAP[level];
                     if (feminineLevel) {
                         updatedAnamnesis.envDust = feminineLevel;
@@ -549,26 +582,31 @@ Requisitos do Usuário:
   - Custo da Energia: ${requirements.miningEnergyCost || 'Não especificado'}
 
 - Detalhes para 'Estação de Trabalho': (Pode usar campos de Produtividade/Edição Criativa ou \`preferences\`)
-  - Carga Principal (Estação de Trab.): ${requirements.workField && requirements.machineType === 'Estação de Trabalho' ? requirements.workField : (requirements.preferences || 'Não especificado')}
+  - Carga Principal (Estação de Trab.): ${requirements.workField && requirements.machineType === 'Estação de Trabalho' ? requirements.workField : (requirements.creativeEditingType && requirements.machineType === 'Estação de Trabalho' ? requirements.creativeEditingType : (requirements.preferences || 'Não especificado'))}
 
 - Detalhes para 'PC para Streaming': (Pode usar campos de Jogos/Produtividade ou \`preferences\`)
-  - Foco Principal (Streaming): ${requirements.preferences && requirements.preferences.includes("Foco Streaming:") ? requirements.preferences : (requirements.purpose || 'Não especificado')}
+  - Foco Principal (Streaming): ${requirements.preferences && requirements.preferences.includes("Foco Streaming:") ? requirements.preferences.split("Foco Streaming:")[1]?.split(";")[0]?.trim() : (requirements.purpose || 'Não especificado')}
+  - Qualidade Almejada (Streaming): ${requirements.preferences && requirements.preferences.includes("Qualidade Stream:") ? requirements.preferences.split("Qualidade Stream:")[1]?.split(";")[0]?.trim() : 'Não especificado'}
+
 
 - Orçamento:
   - Faixa Escolhida: ${requirements.budgetRange || 'Não especificado'}
   - Valor Numérico (BRL): ${requirements.budget ? requirements.budget.toFixed(2) : 'Não especificado, otimizar custo-benefício'}
 
-- Localização (Cidade): ${requirements.city ? `${requirements.city}${requirements.countryCode ? ', ' + requirements.countryCode : ''}` : 'Não detectada/informada'}
+- Localização e Clima: 
+  - Cidade: ${requirements.city ? `${requirements.city}${requirements.countryCode ? ', ' + requirements.countryCode : ''}` : 'Não detectada/informada'}
+  - Temperatura Média da Cidade: ${requirements.cityAvgTemp !== undefined ? requirements.cityAvgTemp + '°C' : 'N/A'}
+  - Temperatura Máxima da Cidade: ${requirements.cityMaxTemp !== undefined ? requirements.cityMaxTemp + '°C' : 'N/A'}
+  - Descrição do Clima na Cidade: ${requirements.cityWeatherDescription || 'N/A'}
 
-- Condições Ambientais:
+- Condições Ambientais (Complementares ou se localização/clima da cidade não disponíveis):
   --- Detalhes do Ambiente Específico do PC (priorizar estes se informados) ---
   - Ventilação no Local do PC: ${requirements.pcVentilation || 'Não especificado'}
   - Nível de Poeira no Local do PC: ${requirements.pcDustLevel || 'Não especificado'}
   - Cômodo do PC: ${requirements.pcRoomType || 'Não especificado'}
-  --- Condições Ambientais Gerais (fallback ou para tipos específicos) ---
-  - Controle de Temperatura (Geral): ${requirements.envTempControl || (requirements.city ? 'Inferir da cidade' : 'Ventilação natural')}
-  - Nível de Poeira (Geral): ${requirements.envDust || (requirements.city ? 'Inferir da cidade' : 'Média')}
-  - (Fallback Temp/Umidade legados): ${requirements.envTemperature || ''} ${requirements.envHumidity || ''}
+  --- Condições Ambientais Gerais (fallback) ---
+  - Controle de Temperatura (Geral): ${requirements.envTempControl || 'Ventilação natural'}
+  - Nível de Poeira (Geral): ${requirements.envDust || 'Média'}
 
 - Preferências Gerais Adicionais:
   - Tamanho do Gabinete: ${requirements.caseSize || 'Não especificado'}
@@ -581,16 +619,16 @@ ${JSON.stringify(componentSummary, null, 2)}
 
 Instruções:
 1.  Selecione um componente para cada categoria essencial (CPU, Placa-mãe, RAM, Armazenamento, Fonte, Gabinete).
-2.  Placa de Vídeo é essencial para 'Computador Pessoal' (Jogos, Edição Criativa, alguns Trabalhos), 'Estação de Trabalho' (dependendo da carga), 'Máquina para Mineração' e 'PC para Streaming' (se envolver jogos). Para outros usos, pode ser opcional/integrada (assuma que CPUs não têm gráficos integrados potentes unless specified).
+2.  Placa de Vídeo é essencial para 'Computador Pessoal' (Jogos, Edição Criativa, alguns Trabalhos), 'Estação de Trabalho' (dependendo da carga), 'Máquina para Mineração' e 'PC para Streaming' (se envolver jogos). Para outros usos, pode ser opcional/integrada.
 3.  Cooler CPU é essencial.
 4.  Priorize compatibilidade e otimize para o \`machineType\` e seus sub-detalhes. Use o \`budget\` como guia forte.
 5.  Para 'Computador Pessoal', use \`purpose\`, \`gamingType\`, \`workField\`, \`softwareUsed\`, \`creativeEditingType\` para guiar CPU, GPU, RAM.
 6.  Para 'Servidor', foque em \`serverType\`, \`serverUsers\`, \`serverRedundancy\`, \`serverUptime\`, \`serverScalability\`.
 7.  Para 'Máquina para Mineração', foque em \`miningGpuCount\`, PSU, e ventilação (gabinete).
-8.  Para 'Estação de Trabalho', considere softwares em \`softwareUsed\` ou \`workField\` para CPU/GPU/RAM de nível profissional se o orçamento permitir.
+8.  Para 'Estação de Trabalho', considere softwares em \`softwareUsed\` ou \`workField\`/\`creativeEditingType\` para CPU/GPU/RAM de nível profissional se o orçamento permitir.
 9.  Para 'PC para Streaming', considere se é dedicado ou multiuso. CPU com mais núcleos é bom. GPU decente se for para jogos+stream.
 10. Para tipos 'Customizado', use \`customDescription\`, \`criticalComponents\`, \`usagePatterns\` como guias principais.
-11. Considere as condições ambientais (priorize \`pcVentilation\`/\`pcDustLevel\`, depois \`envTempControl\`/\`envDust\`). Ambientes quentes/empoeirados pedem melhor refrigeração/filtros. Cômodo como 'Quarto' pode pedir silêncio (\`noiseLevel\`).
+11. Considere as CONDIÇÕES CLIMÁTICAS DA CIDADE (\`cityAvgTemp\`, \`cityMaxTemp\`) e ambientais (\`pcVentilation\`/\`pcDustLevel\`, depois \`envTempControl\`/\`envDust\`). Temperaturas da cidade mais altas ou ambientes quentes/empoeirados pedem melhor refrigeração/gabinetes com bom fluxo de ar/filtros. Cômodo como 'Quarto' pode pedir silêncio (\`noiseLevel\`).
 12. Se o orçamento for insuficiente, explique no 'budgetNotes' e sugira alternativas ou ajuste de orçamento.
 13. Calcule o preço total. Forneça justificativa e avisos de compatibilidade.
 

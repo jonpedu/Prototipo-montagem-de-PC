@@ -71,6 +71,13 @@ export type EnvTempControlType = 'Ar condicionado' | 'Ventilação natural' | 'O
 export type CaseSizeType = 'Mini-ITX' | 'Micro-ATX' | 'ATX' | 'Full Tower' | 'Outro';
 export type NoiseLevelType = 'Silencioso' | 'Moderado' | 'Indiferente';
 
+export interface CityWeatherData {
+  avgTemp: number; // Temperatura média/atual
+  maxTemp: number; // Temperatura máxima
+  minTemp: number; // Temperatura mínima
+  description: string; // Descrição do clima, ex: "Nublado"
+  iconUrl?: string; // URL para ícone do clima
+}
 
 export interface AnamnesisData {
   // Core
@@ -117,6 +124,9 @@ export interface AnamnesisData {
   // Environmental Conditions (refined)
   city?: string;
   countryCode?: string;
+  cityAvgTemp?: number; // Temperatura média da cidade (OpenWeatherMap)
+  cityMaxTemp?: number; // Temperatura máxima da cidade (OpenWeatherMap)
+  cityWeatherDescription?: string; // Descrição do clima da cidade (OpenWeatherMap)
   // -- Specific PC Location (already exists, good)
   pcVentilation?: 'Ar Condicionado' | 'Ventilador' | 'Ambiente Externo' | 'Outro'; // From existing
   pcDustLevel?: 'Baixa' | 'Média' | 'Alta'; // Changed from 'Baixo' | 'Médio' | 'Alto'

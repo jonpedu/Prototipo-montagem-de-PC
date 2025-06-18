@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom'; // Import useLocation
 import Button from '../components/core/Button';
 import LoadingSpinner from '../components/core/LoadingSpinner';
 
@@ -17,7 +17,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ mode }) => {
   const [error, setError] = useState<string | null>(null);
   const { login, register, isLoading } = useAuth();
   const navigate = useNavigate();
-
+  const location = useLocation(); // Get current location object
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -140,14 +140,14 @@ const AuthPage: React.FC<AuthPageProps> = ({ mode }) => {
           {mode === 'login' ? (
             <p className="text-neutral-dark">
               Não tem uma conta?{' '}
-              <Link to="/register" className="font-medium text-accent hover:text-opacity-80">
+              <Link to="/register" state={location.state} className="font-medium text-accent hover:text-opacity-80">
                 Cadastre-se
               </Link>
             </p>
           ) : (
             <p className="text-neutral-dark">
               Já tem uma conta?{' '}
-              <Link to="/login" className="font-medium text-accent hover:text-opacity-80">
+              <Link to="/login" state={location.state} className="font-medium text-accent hover:text-opacity-80">
                 Faça login
               </Link>
             </p>
